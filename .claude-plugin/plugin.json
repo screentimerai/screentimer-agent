@@ -1,0 +1,22 @@
+{
+  "name": "screentimer-agent",
+  "version": "0.1.0",
+  "description": "ScreenTimerAI activity categorization CLI for agent harnesses (Claude Code, Codex, Cursor). Reads the activity log and writes validated category assignments with propagation to similar activities.",
+  "author": {
+    "name": "Linh",
+    "url": "https://screentimerai.com"
+  },
+  "homepage": "https://screentimerai.com",
+  "license": "MIT",
+  "skills": ["./"],
+  "keywords": [
+    "screentimer",
+    "screentimerai",
+    "categorization",
+    "activity-log",
+    "ai-agent",
+    "claude",
+    "cursor",
+    "codex"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "screentimer-agent",
+  "owner": {
+    "name": "Linh"
+  },
+  "metadata": {
+    "description": "ScreenTimerAI activity categorization skill for agent harnesses",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "screentimer-agent",
+      "description": "ScreenTimerAI activity categorization CLI for agent harnesses. Reads the activity log and writes validated category assignments with propagation to similar activities.",
+      "source": "./",
+      "strict": false,
+      "skills": ["./"]
+    }
+  ]
+}

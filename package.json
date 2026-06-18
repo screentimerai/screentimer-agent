@@ -1,0 +1,47 @@
+{
+  "name": "screentimer-agent",
+  "version": "0.1.0",
+  "description": "ScreenTimerAI CLI - Agent harness tool for mass-categorizing activity logs in the ScreenTimerAI app",
+  "main": "dist/index.js",
+  "bin": {
+    "screentimer-agent": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsup --watch",
+    "build": "tsup",
+    "start": "node ./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "keywords": [
+    "screentimer",
+    "screentimerai",
+    "cli",
+    "categorization",
+    "activity-log",
+    "ai-agent",
+    "command-line",
+    "claude",
+    "cursor",
+    "codex"
+  ],
+  "author": "Linh",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.11.19",
+    "@types/yargs": "^17.0.32",
+    "tsup": "^8.5.1",
+    "typescript": "^5.3.3"
+  }
+}
