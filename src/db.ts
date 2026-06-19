@@ -68,6 +68,7 @@ export interface UncategorizedActivityRow {
   start_time: string | null;
   end_time: string | null;
   duration_seconds: number | null;
+  similar_count?: number;
 }
 
 const UNCAT_SELECT = `SELECT id, app_name, bundle_id, window_title, url, start_time, end_time,
@@ -99,6 +100,63 @@ export function getUncategorizedActivities(
 
   return db
     .prepare(`${UNCAT_SELECT}${where} ORDER BY start_time DESC LIMIT ?`)
+    .all(...params) as UncategorizedActivityRow[];
+}
+
+export function getUniqueUncategorizedActivities(
+  db: Database.Database,
+  limit: number,
+  start?: string,
+  end?: string
+): UncategorizedActivityRow[] {
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (start) {
+    conditions.push('start_time >= ?');
+    params.push(start);
+  }
+  if (end) {
+    conditions.push('start_time <= ?');
+    params.push(end);
+  }
+
+  const where =
+    conditions.length > 0 ? ` AND ${conditions.join(' AND ')}` : '';
+  params.push(limit);
+
+  return db
+    .prepare(
+      `WITH base AS (
+         SELECT id, app_name, bundle_id, window_title, url, start_time, end_time,
+                (julianday(COALESCE(end_time, start_time)) - julianday(start_time)) * 86400 AS duration_seconds,
+                CASE
+                  WHEN url IS NOT NULL AND url != '' THEN 'url:' || url
+                  WHEN bundle_id IS NOT NULL AND bundle_id != ''
+                    AND window_title IS NOT NULL AND window_title != ''
+                    THEN 'window:' || bundle_id || char(31) || window_title
+                  ELSE 'activity:' || id
+                END AS similarity_key
+         FROM activity_logs
+         WHERE category_id IS NULL${where}
+       ),
+       ranked AS (
+         SELECT id, app_name, bundle_id, window_title, url, start_time, end_time,
+                duration_seconds,
+                COUNT(*) OVER (PARTITION BY similarity_key) AS similar_count,
+                ROW_NUMBER() OVER (
+                  PARTITION BY similarity_key
+                  ORDER BY start_time DESC, id DESC
+                ) AS rn
+         FROM base
+       )
+       SELECT id, app_name, bundle_id, window_title, url, start_time, end_time,
+              duration_seconds, similar_count
+       FROM ranked
+       WHERE rn = 1
+       ORDER BY start_time DESC, id DESC
+       LIMIT ?`
+    )
     .all(...params) as UncategorizedActivityRow[];
 }
 
@@ -143,6 +201,142 @@ export function getCounts(db: Database.Database): Counts {
     most_recent_activity: recent?.t ?? null,
     oldest_activity: oldest?.t ?? null,
   };
+}
+
+export interface TimeBucketRow {
+  key: string;
+  label: string;
+  color: string | null;
+  is_disruptor: number | null;
+  seconds: number;
+  activities: number;
+}
+
+export type TimeDimension = 'category' | 'group' | 'app';
+
+/**
+ * Aggregate total tracked time within an optional [start, end] window, grouped
+ * by category, category group, or app. Uncategorized activities collapse into a
+ * single "Uncategorized" bucket for the category/group dimensions.
+ */
+export function getTimeBreakdown(
+  db: Database.Database,
+  by: TimeDimension,
+  start?: string,
+  end?: string
+): TimeBucketRow[] {
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  if (start) {
+    conditions.push('a.start_time >= ?');
+    params.push(start);
+  }
+  if (end) {
+    conditions.push('a.start_time <= ?');
+    params.push(end);
+  }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const dur = `(julianday(COALESCE(a.end_time, a.start_time)) - julianday(a.start_time)) * 86400`;
+
+  let select: string;
+  if (by === 'app') {
+    select = `SELECT a.app_name AS key,
+                     COALESCE(NULLIF(a.app_name, ''), 'Unknown app') AS label,
+                     NULL AS color, NULL AS is_disruptor,
+                     SUM(${dur}) AS seconds, COUNT(*) AS activities
+              FROM activity_logs a ${where}
+              GROUP BY a.app_name`;
+  } else if (by === 'group') {
+    select = `SELECT CAST(COALESCE(g.id, -1) AS TEXT) AS key,
+                     COALESCE(g.name, 'Uncategorized') AS label,
+                     g.color AS color, g.is_disruptor AS is_disruptor,
+                     SUM(${dur}) AS seconds, COUNT(*) AS activities
+              FROM activity_logs a
+              LEFT JOIN user_categories c ON a.category_id = c.id
+              LEFT JOIN user_category_groups g ON c.group_id = g.id
+              ${where}
+              GROUP BY COALESCE(g.id, -1)`;
+  } else {
+    select = `SELECT CAST(COALESCE(c.id, -1) AS TEXT) AS key,
+                     COALESCE(c.category, 'Uncategorized') AS label,
+                     COALESCE(c.color, g.color) AS color, g.is_disruptor AS is_disruptor,
+                     SUM(${dur}) AS seconds, COUNT(*) AS activities
+              FROM activity_logs a
+              LEFT JOIN user_categories c ON a.category_id = c.id
+              LEFT JOIN user_category_groups g ON c.group_id = g.id
+              ${where}
+              GROUP BY COALESCE(c.id, -1)`;
+  }
+
+  return db
+    .prepare(`${select} HAVING seconds > 0 ORDER BY seconds DESC`)
+    .all(...params) as TimeBucketRow[];
+}
+
+export interface WindowActivityRow {
+  id: number;
+  app_name: string | null;
+  bundle_id: string | null;
+  window_title: string | null;
+  url: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  duration_seconds: number;
+}
+
+export interface WindowFilters {
+  app?: string;
+  urlContains?: string;
+  titleContains?: string;
+}
+
+/**
+ * Fetch activities whose start_time falls in [start, end], optionally filtered
+ * by app name (exact, case-insensitive) and url/title substrings. Used by the
+ * billing `tag` command to select which activities to label. Read-only.
+ */
+export function getActivitiesInWindow(
+  db: Database.Database,
+  start: string | undefined,
+  end: string | undefined,
+  filters: WindowFilters = {}
+): WindowActivityRow[] {
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (start) {
+    conditions.push('start_time >= ?');
+    params.push(start);
+  }
+  if (end) {
+    conditions.push('start_time <= ?');
+    params.push(end);
+  }
+  if (filters.app) {
+    conditions.push('LOWER(COALESCE(app_name, \'\')) = LOWER(?)');
+    params.push(filters.app);
+  }
+  if (filters.urlContains) {
+    conditions.push('url IS NOT NULL AND LOWER(url) LIKE LOWER(?)');
+    params.push(`%${filters.urlContains}%`);
+  }
+  if (filters.titleContains) {
+    conditions.push('window_title IS NOT NULL AND LOWER(window_title) LIKE LOWER(?)');
+    params.push(`%${filters.titleContains}%`);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  return db
+    .prepare(
+      `SELECT id, app_name, bundle_id, window_title, url, start_time, end_time,
+              (julianday(COALESCE(end_time, start_time)) - julianday(start_time)) * 86400 AS duration_seconds
+       FROM activity_logs
+       ${where}
+       ORDER BY start_time ASC, id ASC`
+    )
+    .all(...params) as WindowActivityRow[];
 }
 
 export interface SourceRow {

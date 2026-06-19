@@ -4,7 +4,7 @@
   "description": "ScreenTimerAI CLI - Agent harness tool for mass-categorizing activity logs in the ScreenTimerAI app",
   "main": "dist/index.js",
   "bin": {
-    "screentimer-agent": "./dist/index.js"
+    "screentimer": "./dist/index.js"
   },
   "scripts": {
     "dev": "tsup --watch",

@@ -1,5 +1,11 @@
 import { writeFileSync } from 'node:fs';
-import { openDb, listCategories, getUncategorizedActivities, CategoryRow } from '../db';
+import {
+  openDb,
+  listCategories,
+  getUncategorizedActivities,
+  getUniqueUncategorizedActivities,
+  CategoryRow,
+} from '../db';
 import { resolveDbPath } from '../config';
 
 const MAX_LIMIT = 200;
@@ -32,7 +38,9 @@ export function exportCommand(args: any) {
   try {
     const limit = clampLimit(args.limit);
     const categories = listCategories(db, false).map(formatCategory);
-    const activityRows = getUncategorizedActivities(db, limit, args.start, args.end);
+    const activityRows = args.unique
+      ? getUniqueUncategorizedActivities(db, limit, args.start, args.end)
+      : getUncategorizedActivities(db, limit, args.start, args.end);
     const activities = activityRows.map((r) => ({
       ...r,
       duration_seconds:
@@ -45,10 +53,13 @@ export function exportCommand(args: any) {
       categories,
       activities,
       instructions:
-        'Assign each activity a category_id chosen from `categories`. ' +
+        `Assign each activity${args.unique ? ' representative' : ''} a category_id chosen from \`categories\`. ` +
         'Respect group semantics: group_is_disruptor=true categories are distractions. ' +
         'Return JSON of shape {"assignments":[{"activity_id":<id>,"category_id":<id>}]} ' +
-        'and pipe it to `screentimer-agent apply`. ' +
+        'and pipe it to `screentimer apply`. ' +
+        (args.unique
+          ? 'Each activity includes similar_count and represents matching uncategorized rows that apply will update by default. '
+          : '') +
         'Only assign categories you are confident about; leave uncertain activities unassigned.',
     };
 
@@ -56,9 +67,9 @@ export function exportCommand(args: any) {
 
     if (args.out) {
       writeFileSync(args.out, json, 'utf-8');
-      console.error(`📦 Exported ${activities.length} activities + ${categories.length} categories to ${args.out}`);
+      console.error(`📦 Exported ${activities.length} ${args.unique ? 'unique ' : ''}activities + ${categories.length} categories to ${args.out}`);
     } else {
-      console.error(`📦 ${activities.length} activities, ${categories.length} categories`);
+      console.error(`📦 ${activities.length} ${args.unique ? 'unique ' : ''}activities, ${categories.length} categories`);
       console.log(json);
     }
 

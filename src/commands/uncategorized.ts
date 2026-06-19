@@ -1,4 +1,8 @@
-import { openDb, getUncategorizedActivities } from '../db';
+import {
+  openDb,
+  getUncategorizedActivities,
+  getUniqueUncategorizedActivities,
+} from '../db';
 
 const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;
@@ -13,14 +17,16 @@ export function uncategorizedCommand(args: any) {
   const db = openDb({ readonly: true }, args.db);
   try {
     const limit = clampLimit(args.limit);
-    const rows = getUncategorizedActivities(db, limit, args.start, args.end);
+    const rows = args.unique
+      ? getUniqueUncategorizedActivities(db, limit, args.start, args.end)
+      : getUncategorizedActivities(db, limit, args.start, args.end);
     const activities = rows.map((r) => ({
       ...r,
       duration_seconds:
         r.duration_seconds === null ? null : Math.round(r.duration_seconds),
     }));
 
-    console.error(`🔍 ${activities.length} uncategorized activit${activities.length === 1 ? 'y' : 'ies'} (limit ${limit})`);
+    console.error(`🔍 ${activities.length} ${args.unique ? 'unique ' : ''}uncategorized activit${activities.length === 1 ? 'y' : 'ies'} (limit ${limit})`);
     console.log(JSON.stringify({ activities }, null, 2));
     return { activities };
   } finally {

@@ -11,7 +11,7 @@ Built with the same tech stack as [postiz-agent](https://github.com/gitroomhq/po
 ```bash
 cd ~/code/screentimer-agent
 pnpm install && pnpm build
-pnpm link --global   # optional, makes `screentimer-agent` available on PATH
+pnpm link --global   # optional, makes `screentimer` available on PATH
 ```
 
 The CLI reads the ScreenTimerAI database directly:
@@ -25,11 +25,29 @@ Override with `INDISTRACTABLE_DB_PATH` or `--db <path>`.
 ## Commands
 
 ```bash
-screentimer-agent db:status                 # counts, paths, most recent activity
-screentimer-agent categories                # all active categories + group metadata
-screentimer-agent uncategorized --limit 50  # recent rows where category_id IS NULL
-screentimer-agent export --limit 100        # combined payload: activities + taxonomy
-screentimer-agent apply --in assignments.json
+screentimer db:status                 # counts, paths, most recent activity
+screentimer categories                # all active categories + group metadata
+screentimer uncategorized --limit 50  # recent rows where category_id IS NULL
+screentimer uncategorized --unique    # one representative per similar activity group
+screentimer export --limit 100        # deduped payload: unique activities + taxonomy
+screentimer export --no-unique        # include duplicate activity rows if needed
+screentimer apply --in assignments.json
+screentimer time                       # ASCII bar chart of today's time by category
+screentimer time --days 7 --top 8      # last 7 days, top 8 buckets (rest → "Other")
+screentimer time --by group            # by category group; --by app for per-app
+```
+
+`time` renders a colored ASCII bar chart to stderr and a JSON breakdown to stdout. Defaults to today; use `--days N` or `--start`/`--end` ISO timestamps. Disruptor categories/groups are flagged `⚠`.
+
+```
+╔════════════════════════════════════════════════════════╗
+║ ⏱  Screen time — last 7 days · by category             ║
+║ total: 61h 01m  ·  9 buckets                           ║
+╚════════════════════════════════════════════════════════╝
+
+  Coding/Programming    ████████████████████████████  31h 26m  52%
+  General Work          ███████████░░░░░░░░░░░░░░░░░  12h 43m  21%
+  Gaming                █████░░░░░░░░░░░░░░░░░░░░░░░   6h 06m  10% ⚠
 ```
 
 `apply` accepts JSON via `--in <file>` or stdin, shape:
@@ -48,18 +66,18 @@ A bare `[...]` array is also accepted.
 
 ```bash
 # 1. See the backlog
-screentimer-agent db:status
+screentimer db:status
 
 # 2. Export a batch (uncategorized activities + category taxonomy)
-screentimer-agent export --limit 100 > batch.json
+screentimer export --limit 100 > batch.json
 
 # 3. Harness reasons over batch.json, picks a category_id for each activity,
 #    writes assignments.json:
 #    { "assignments": [ { "activity_id": 90417, "category_id": 4 }, ... ] }
 
 # 4. Apply (dry-run first, then for real)
-screentimer-agent apply --dry-run --in assignments.json
-screentimer-agent apply --in assignments.json
+screentimer apply --dry-run --in assignments.json
+screentimer apply --in assignments.json
 
 # 5. Repeat until db:status shows the uncategorized count at your target
 ```
@@ -71,6 +89,7 @@ screentimer-agent apply --in assignments.json
 - Writes are atomic (single transaction) and use `WHERE category_id IS NULL`, so the app's own background categorizer can't be clobbered.
 - Each assignment **propagates** to similar uncategorized rows (same URL, or same `bundle_id` + `window_title`) unless `--propagate false`.
 - `--dry-run` previews the effect without writing.
+- `export` dedupes by default so agents categorize one representative per similar activity group. The output includes `similar_count`, and normal `apply` propagation updates the matching uncategorized rows. Use `export --no-unique` only when you need raw duplicate rows.
 
 ## Development
 
