@@ -9,12 +9,14 @@
   "scripts": {
     "dev": "tsup --watch",
     "build": "tsup",
-    "start": "node ./dist/index.js"
+    "start": "node ./dist/index.js",
+    "prepublishOnly": "npm run build"
   },
   "files": [
     "dist",
     "README.md",
-    "SKILL.md"
+    "SKILL.md",
+    "LICENSE"
   ],
   "keywords": [
     "screentimer",
@@ -28,8 +30,19 @@
     "cursor",
     "codex"
   ],
-  "author": "Linh",
+  "author": "Linh Phung",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/screentimerai/screentimer-agent.git"
+  },
+  "homepage": "https://github.com/screentimerai/screentimer-agent#readme",
+  "bugs": {
+    "url": "https://github.com/screentimerai/screentimer-agent/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18.0.0"
   },

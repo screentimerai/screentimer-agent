@@ -1,5 +1,7 @@
 # screentimer-agent
 
+[![skills.sh](https://skills.sh/b/screentimerai/screentimer-agent)](https://skills.sh/screentimerai/screentimer-agent)
+
 A CLI that lets an AI agent harness ([Claude Code](https://claude.com/claude-code), Codex, Cursor, Cline) **mass-categorize uncategorized activities** in the [ScreenTimerAI](https://screentimerai.com) activity log.
 
 It does **not** call any LLM itself. The connected harness supplies the reasoning; this CLI provides the data contract (read the activity log + category taxonomy) and the persistence layer (write validated category assignments back to the local SQLite DB, with propagation to similar activities).
@@ -7,6 +9,31 @@ It does **not** call any LLM itself. The connected harness supplies the reasonin
 Built with the same tech stack as [postiz-agent](https://github.com/gitroomhq/postiz-agent): TypeScript + yargs + tsup + better-sqlite3, plus a `SKILL.md` and `.claude-plugin/` so it loads as a Claude Code skill.
 
 ## Install
+
+```bash
+npm install -g screentimer-agent     # installs the `screentimer` command
+# or
+pnpm install -g screentimer-agent
+```
+
+> The package is named `screentimer-agent` but the command it installs is `screentimer`.
+> `better-sqlite3` is a native module, so install needs build tools (or a prebuilt binary) on your machine.
+
+As a skill for your agent harness ([skills.sh](https://skills.sh) ecosystem — Claude Code, Cursor, Codex, Cline, …):
+
+```bash
+npx skills add screentimerai/screentimer-agent          # project-level
+npx skills add screentimerai/screentimer-agent -g        # global
+```
+
+As a Claude Code plugin:
+
+```bash
+/plugin marketplace add screentimerai/screentimer-agent
+/plugin install screentimer-agent@screentimer-agent
+```
+
+Local dev:
 
 ```bash
 cd ~/code/screentimer-agent

@@ -2,6 +2,7 @@
 name: screentimer-agent
 description: screentimer-agent is a CLI that lets an AI agent harness (Claude Code, Codex, Cursor, Cline) read the ScreenTimerAI activity log database and mass-categorize uncategorized activities by writing category assignments back to the local SQLite database with propagation to similar activities.
 homepage: https://screentimerai.com
+metadata: {"openclaw":{"emoji":"⏱️","requires":{"bins":["screentimer"],"env":[]}}}
 ---
 
 # screentimer-agent
