@@ -8,6 +8,7 @@ import { exportCommand } from './commands/exportBatch';
 import { applyCommand } from './commands/apply';
 import { dbStatusCommand } from './commands/dbStatus';
 import { timeCommand } from './commands/time';
+import { timelineCommand } from './commands/timeline';
 import { tagCommand } from './commands/tag';
 import { untagCommand } from './commands/untag';
 import { tagsListCommand } from './commands/tagsList';
@@ -161,6 +162,54 @@ yargs(hideBin(process.argv))
           default: false,
         }),
     timeCommand as any
+  )
+  .command(
+    'timeline',
+    'Show a chronological timeline of what was on screen (focus blocks with app, category, and time span). Use --start/--end to cross-reference an external time range, e.g. an agent session.',
+    (y: Argv) =>
+      dbOption(y)
+        .option('days', {
+          describe: 'Window: last N days (1 = today since midnight). Ignored if --start/--end given.',
+          type: 'number',
+          default: 1,
+        })
+        .option('start', {
+          describe: 'ISO timestamp; only activities with start_time >= this',
+          type: 'string',
+        })
+        .option('end', {
+          describe: 'ISO timestamp; only activities with start_time <= this',
+          type: 'string',
+        })
+        .option('app', {
+          describe: 'Only include activities from this app (exact, case-insensitive)',
+          type: 'string',
+        })
+        .option('merge-gap', {
+          describe: 'Merge consecutive same-app+category activities separated by <= N seconds into one block (default 300). Ignored with --raw.',
+          type: 'number',
+          default: 300,
+        })
+        .option('min-seconds', {
+          describe: 'Drop blocks shorter than this many seconds (default 0 = keep all)',
+          type: 'number',
+          default: 0,
+        })
+        .option('raw', {
+          describe: 'Do not merge into focus blocks; emit one row per raw activity',
+          type: 'boolean',
+          default: false,
+        })
+        .option('limit', {
+          describe: 'Show only the first N blocks',
+          type: 'number',
+        })
+        .option('no-color', {
+          describe: 'Disable ANSI colors',
+          type: 'boolean',
+          default: false,
+        }),
+    timelineCommand as any
   )
   .command(
     'tag',

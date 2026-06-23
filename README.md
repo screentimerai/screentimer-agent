@@ -62,9 +62,13 @@ screentimer apply --in assignments.json
 screentimer time                       # ASCII bar chart of today's time by category
 screentimer time --days 7 --top 8      # last 7 days, top 8 buckets (rest → "Other")
 screentimer time --by group            # by category group; --by app for per-app
+screentimer timeline                   # chronological focus blocks (what was on screen, when)
+screentimer timeline --start <ISO> --end <ISO>   # cross-reference a specific window
 ```
 
 `time` renders a colored ASCII bar chart to stderr and a JSON breakdown to stdout. Defaults to today; use `--days N` or `--start`/`--end` ISO timestamps. Disruptor categories/groups are flagged `⚠`.
+
+`timeline` renders a chronological sequence of focus blocks (each: time span, app, category, duration) instead of aggregates. Consecutive same-app+category activities are merged into one block (gap ≤ `--merge-gap` seconds, default 300; `--raw` to disable). Same window flags as `time`, plus `--app`, `--min-seconds`, and `--limit`. Use it to see *when* you were focused and on *what* — e.g. pass an external time range (an agent session window) to `--start`/`--end` to see what was actually on screen during it.
 
 ```
 ╔════════════════════════════════════════════════════════╗

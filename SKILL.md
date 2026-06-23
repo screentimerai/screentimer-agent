@@ -69,7 +69,12 @@ screentimer time                       # ASCII bar chart of today's time by cate
 screentimer time --days 7 --top 8      # last 7 days, top 8 buckets (rest → "Other")
 screentimer time --by group            # group by category group (shows ⚠ disruptors)
 screentimer time --by app              # group by app instead of category
+screentimer timeline                   # chronological focus blocks (what was on screen, when)
+screentimer timeline --start <ISO> --end <ISO>   # what was on screen during a specific window
+screentimer timeline --raw             # one row per raw activity (no focus-block merging)
 ```
+
+`timeline` is the chronological counterpart to `time`'s aggregates: it lists focus blocks (time span · app · category · duration), merging consecutive same-app+category activities (gap ≤ `--merge-gap`s, default 300). Use `--start`/`--end` to cross-reference an external time range — e.g. an AI agent session window — to see what was actually on screen and whether the time was focused Work or `⚠` distraction.
 
 `time` prints a colored ASCII chart to stderr and a JSON breakdown (`buckets`, `total_seconds`, `human`) to stdout. Window defaults to today (since local midnight); use `--days N`, or `--start`/`--end` ISO timestamps for a custom range. Disruptor categories/groups are marked `⚠`.
 

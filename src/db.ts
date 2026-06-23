@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { existsSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { resolveDbPath } from './config';
 
 export interface OpenDbOptions {
@@ -18,8 +19,28 @@ export function openDb(options: OpenDbOptions = {}, explicitPath?: string): Data
   const dbPath = resolveDbPath(explicitPath);
 
   if (!existsSync(dbPath)) {
-    console.error(`❌ ScreenTimerAI database not found at: ${dbPath}`);
-    console.error('   Set INDISTRACTABLE_DB_PATH or pass --db <path>.');
+    // Was the path chosen by the user (flag/env) or did we fall back to the
+    // default app-support location? The fix differs: a user-supplied path that's
+    // missing is a typo; a missing default almost always means the app isn't
+    // installed (or hasn't run yet to create its DB).
+    const userSuppliedPath = Boolean(explicitPath || process.env.INDISTRACTABLE_DB_PATH);
+
+    if (userSuppliedPath) {
+      console.error(`❌ ScreenTimerAI database not found at: ${dbPath}`);
+      console.error('   Check the path you passed via --db / INDISTRACTABLE_DB_PATH.');
+    } else if (!existsSync(dirname(dbPath))) {
+      console.error("❌ ScreenTimerAI doesn't appear to be installed.");
+      console.error(`   No app data found at: ${dirname(dbPath)}`);
+      console.error('   Install it from https://screentimerai.com and run it once to');
+      console.error('   start logging activity, or point at an existing database with');
+      console.error('   --db <path> or INDISTRACTABLE_DB_PATH.');
+    } else {
+      // App dir exists but no DB yet — installed but never logged anything.
+      console.error(`❌ ScreenTimerAI database not found at: ${dbPath}`);
+      console.error('   The app looks installed but has no database yet — open');
+      console.error('   ScreenTimerAI and let it track some activity, then retry.');
+      console.error('   Or point at another database with --db / INDISTRACTABLE_DB_PATH.');
+    }
     process.exit(1);
   }
 
@@ -337,6 +358,68 @@ export function getActivitiesInWindow(
        ORDER BY start_time ASC, id ASC`
     )
     .all(...params) as WindowActivityRow[];
+}
+
+export interface TimelineActivityRow {
+  id: number;
+  app_name: string | null;
+  bundle_id: string | null;
+  window_title: string | null;
+  url: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  duration_seconds: number;
+  category: string | null;
+  group_name: string | null;
+  color: string | null;
+  is_disruptor: number | null;
+}
+
+/**
+ * Fetch activities in an optional [start, end] window in CHRONOLOGICAL order,
+ * with their category + group joined. Unlike getTimeBreakdown (which aggregates)
+ * this returns the raw per-activity sequence so a caller can reconstruct what
+ * was on screen minute-by-minute and cross-reference against external time
+ * ranges (e.g. agent session windows). Read-only.
+ */
+export function getTimelineActivities(
+  db: Database.Database,
+  start?: string,
+  end?: string,
+  appFilter?: string
+): TimelineActivityRow[] {
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  if (start) {
+    conditions.push('a.start_time >= ?');
+    params.push(start);
+  }
+  if (end) {
+    conditions.push('a.start_time <= ?');
+    params.push(end);
+  }
+  if (appFilter) {
+    conditions.push("LOWER(COALESCE(a.app_name, '')) = LOWER(?)");
+    params.push(appFilter);
+  }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const dur = `(julianday(COALESCE(a.end_time, a.start_time)) - julianday(a.start_time)) * 86400`;
+
+  return db
+    .prepare(
+      `SELECT a.id, a.app_name, a.bundle_id, a.window_title, a.url,
+              a.start_time, a.end_time, ${dur} AS duration_seconds,
+              c.category AS category,
+              g.name AS group_name,
+              COALESCE(c.color, g.color) AS color,
+              g.is_disruptor AS is_disruptor
+       FROM activity_logs a
+       LEFT JOIN user_categories c ON a.category_id = c.id
+       LEFT JOIN user_category_groups g ON c.group_id = g.id
+       ${where}
+       ORDER BY a.start_time ASC, a.id ASC`
+    )
+    .all(...params) as TimelineActivityRow[];
 }
 
 export interface SourceRow {
