@@ -1,6 +1,6 @@
 {
   "name": "screentimer-agent",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "ScreenTimerAI CLI - Agent harness tool for mass-categorizing activity logs in the ScreenTimerAI app",
   "main": "dist/index.js",
   "bin": {
