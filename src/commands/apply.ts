@@ -4,7 +4,6 @@ import {
   openDb,
   categoryExists,
   activityExists,
-  getActivitySource,
   SourceRow,
 } from '../db';
 
@@ -164,11 +163,28 @@ function runApply(args: any) {
       return result;
     }
 
+    // Prepared once and reused across every assignment (and shared with the
+    // dry-run preview below) so the same SQL is not re-compiled per iteration.
+    const sourceStmt = db.prepare(
+      'SELECT id, url, bundle_id, window_title FROM activity_logs WHERE id = ?'
+    );
+
     const doWrite = db.transaction(() => {
       const updateStmt = db.prepare(
         overwrite
           ? 'UPDATE activity_logs SET category_id = ? WHERE id = ?'
           : 'UPDATE activity_logs SET category_id = ? WHERE id = ? AND category_id IS NULL'
+      );
+      // Propagation statements, prepared once outside the per-assignment loop.
+      const propUrlStmt = db.prepare(
+        `UPDATE activity_logs SET category_id = ?
+         WHERE category_id IS NULL AND url IS NOT NULL AND url = ?`
+      );
+      const propAppTitleStmt = db.prepare(
+        `UPDATE activity_logs SET category_id = ?
+         WHERE category_id IS NULL
+           AND bundle_id IS NOT NULL AND window_title IS NOT NULL
+           AND bundle_id = ? AND window_title = ?`
       );
 
       for (const a of valid) {
@@ -177,10 +193,11 @@ function runApply(args: any) {
           result.updated_count += 1;
 
           if (propagate && !dryRun) {
-            const source: SourceRow | undefined = getActivitySource(db, a.activity_id);
+            const source = sourceStmt.get(a.activity_id) as SourceRow | undefined;
             if (source) {
               result.propagated_count += propagateToSimilar(
-                db,
+                propUrlStmt,
+                propAppTitleStmt,
                 a.category_id,
                 source
               );
@@ -193,22 +210,64 @@ function runApply(args: any) {
     });
 
     if (dryRun) {
-      // In dry-run we report what *would* be written. We count potential
-      // updates without mutating: an activity is writable if it is
-      // uncategorized (or overwrite is on).
+      // Report what *would* be written without mutating. An activity is
+      // writable if it is uncategorized (or overwrite is on). We also
+      // simulate propagation so the preview reflects the real fan-out:
+      // each representative would categorize its similar uncategorized rows
+      // (excluding itself, deduped so shared keys are not double-counted).
       const checkStmt = db.prepare(
         overwrite
           ? 'SELECT 1 FROM activity_logs WHERE id = ?'
           : 'SELECT 1 FROM activity_logs WHERE id = ? AND category_id IS NULL'
       );
+      const countUrlStmt = db.prepare(
+        `SELECT COUNT(*) AS n FROM activity_logs
+         WHERE category_id IS NULL AND url IS NOT NULL AND url = ? AND id != ?`
+      );
+      const countAppTitleStmt = db.prepare(
+        `SELECT COUNT(*) AS n FROM activity_logs
+         WHERE category_id IS NULL
+           AND bundle_id IS NOT NULL AND window_title IS NOT NULL
+           AND bundle_id = ? AND window_title = ? AND id != ?`
+      );
+      const seenKeys = new Set<string>();
       for (const a of valid) {
         if (checkStmt.get(a.activity_id)) {
           result.updated_count += 1;
+
+          if (propagate) {
+            const source = sourceStmt.get(a.activity_id) as SourceRow | undefined;
+            if (source) {
+              let key: string | null = null;
+              if (source.url) {
+                key = `u|${source.url}`;
+              } else if (source.bundle_id && source.window_title) {
+                key = `b|${source.bundle_id}|${source.window_title}`;
+              }
+              if (key && !seenKeys.has(key)) {
+                seenKeys.add(key);
+                const row = source.url
+                  ? (countUrlStmt.get(source.url, source.id) as { n: number })
+                  : (countAppTitleStmt.get(
+                      source.bundle_id,
+                      source.window_title,
+                      source.id
+                    ) as { n: number });
+                result.propagated_count += row.n;
+              }
+            }
+          }
         } else {
           result.skipped_count += 1;
         }
       }
-      console.error(`🧪 Dry run — no changes written. Would update ${result.updated_count}, skip ${result.skipped_count}.`);
+      console.error(
+        `🧪 Dry run — no changes written. Would update ${result.updated_count}` +
+          (result.propagated_count > 0
+            ? `, propagate to ~${result.propagated_count} similar`
+            : '') +
+          `, skip ${result.skipped_count}.`
+      );
       console.log(JSON.stringify(result, null, 2));
       return result;
     }
@@ -239,30 +298,19 @@ function runApply(args: any) {
  * Returns the number of additional rows updated.
  */
 function propagateToSimilar(
-  db: Database.Database,
+  propUrlStmt: Database.Statement,
+  propAppTitleStmt: Database.Statement,
   categoryId: number,
   source: SourceRow
 ): number {
   if (source.url) {
-    const info = db
-      .prepare(
-        `UPDATE activity_logs SET category_id = ?
-         WHERE category_id IS NULL AND url IS NOT NULL AND url = ?`
-      )
-      .run(categoryId, source.url);
-    return info.changes;
+    return Number(propUrlStmt.run(categoryId, source.url).changes);
   }
 
   if (source.bundle_id && source.window_title) {
-    const info = db
-      .prepare(
-        `UPDATE activity_logs SET category_id = ?
-         WHERE category_id IS NULL
-           AND bundle_id IS NOT NULL AND window_title IS NOT NULL
-           AND bundle_id = ? AND window_title = ?`
-      )
-      .run(categoryId, source.bundle_id, source.window_title);
-    return info.changes;
+    return Number(
+      propAppTitleStmt.run(categoryId, source.bundle_id, source.window_title).changes
+    );
   }
 
   return 0;
